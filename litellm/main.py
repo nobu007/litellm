@@ -5080,6 +5080,7 @@ async def ahealth_check(  # noqa: PLR0915
     try:
 
         model: Optional[str] = model_params.get("model", None)
+        api_base: Optional[str] = model_params.get("api_base", None)
 
         if model is None:
             raise Exception("model not set")
