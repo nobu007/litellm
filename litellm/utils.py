@@ -6210,6 +6210,7 @@ def get_llm_provider(
                 return model, custom_llm_provider, dynamic_api_key, api_base
 
         if custom_llm_provider:
+            print("r1",model, custom_llm_provider, dynamic_api_key, api_base)
             return model, custom_llm_provider, dynamic_api_key, api_base
 
         if api_key and api_key.startswith("os.environ/"):
@@ -6279,10 +6280,15 @@ def get_llm_provider(
                     or get_secret("TOGETHERAI_API_KEY")
                     or get_secret("TOGETHER_AI_TOKEN")
                 )
+            elif custom_llm_provider == "openrouter":
+                api_base = "https://openrouter.ai/api/v1"
+                dynamic_api_key = get_secret("OPENROUTER_API_KEY")
+            print("r2",model, custom_llm_provider, dynamic_api_key, api_base)
             return model, custom_llm_provider, dynamic_api_key, api_base
         elif model.split("/", 1)[0] in litellm.provider_list:
             custom_llm_provider = model.split("/", 1)[0]
             model = model.split("/", 1)[1]
+            print("r3",model, custom_llm_provider, dynamic_api_key, api_base)
             return model, custom_llm_provider, dynamic_api_key, api_base
         # check if api base is a known openai compatible endpoint
         if api_base:
@@ -6303,6 +6309,7 @@ def get_llm_provider(
                     elif endpoint == "api.groq.com/openai/v1":
                         custom_llm_provider = "groq"
                         dynamic_api_key = get_secret("GROQ_API_KEY")
+                    print("r4",model, custom_llm_provider, dynamic_api_key, api_base)
                     return model, custom_llm_provider, dynamic_api_key, api_base
 
         # check if model in known model provider list  -> for huggingface models, raise exception as they don't have a fixed provider (can be togetherai, anyscale, baseten, runpod, et.)
@@ -6394,6 +6401,7 @@ def get_llm_provider(
                 ),
                 llm_provider="",
             )
+        print("r5",model, custom_llm_provider, dynamic_api_key, api_base)
         return model, custom_llm_provider, dynamic_api_key, api_base
     except Exception as e:
         if isinstance(e, litellm.exceptions.BadRequestError):
