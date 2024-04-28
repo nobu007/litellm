@@ -3854,6 +3854,7 @@ async def ahealth_check(
     """
     try:
         model: Optional[str] = model_params.get("model", None)
+        api_base: Optional[str] = model_params.get("api_base", None)
 
         if model is None:
             raise Exception("model not set")
@@ -3861,7 +3862,9 @@ async def ahealth_check(
         if model in litellm.model_cost and mode is None:
             mode = litellm.model_cost[model]["mode"]
 
-        model, custom_llm_provider, _, _ = get_llm_provider(model=model)
+        model, custom_llm_provider, _, _ = get_llm_provider(
+            model=model, api_base=api_base
+        )
         mode = mode or "chat"  # default to chat completion calls
 
         if custom_llm_provider == "azure":
