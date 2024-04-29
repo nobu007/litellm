@@ -477,6 +477,7 @@ class AnthropicChatCompletion(BaseLLM):
                     headers=headers,
                 )
             else:
+                print_verbose("makes async anthropic not streaming POST request")
                 return self.acompletion_function(
                     model=model,
                     messages=messages,
@@ -524,6 +525,7 @@ class AnthropicChatCompletion(BaseLLM):
                 return streaming_response
 
             else:
+                print_verbose("makes anthropic not streaming POST request")
                 response = requests.post(
                     api_base, headers=headers, data=json.dumps(data)
                 )
