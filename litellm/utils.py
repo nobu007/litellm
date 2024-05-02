@@ -1484,8 +1484,6 @@ class Logging:
                         complete_streaming_response = litellm.stream_chunk_builder(
                             self.sync_streaming_chunks,
                             messages=self.model_call_details.get("messages", None),
-                            start_time=start_time,
-                            end_time=end_time,
                         )
                     except Exception as e:
 
@@ -2083,8 +2081,6 @@ class Logging:
                     complete_streaming_response = litellm.stream_chunk_builder(
                         self.streaming_chunks,
                         messages=self.model_call_details.get("messages", None),
-                        start_time=start_time,
-                        end_time=end_time,
                     )
                 except Exception as e:
                     print_verbose(
@@ -2348,8 +2344,6 @@ class Logging:
                             },
                         }
                         liteDebuggerClient.log_event(
-                            model=self.model,
-                            messages=self.messages,
                             end_user=self.model_call_details.get("user", "default"),
                             response_obj=result,
                             start_time=start_time,
@@ -2373,6 +2367,7 @@ class Logging:
                         )
 
                         lunaryLogger.log_event(
+                            kwargs=self.model_call_details,
                             type=_type,
                             event="error",
                             user_id=self.model_call_details.get("user", "default"),
@@ -2926,7 +2921,7 @@ def client(original_function):
                 and call_type != CallTypes.text_completion.value
             ):
                 raise ValueError("model param not passed in.")
-
+        print(f"util wrapper({original_function}) model= {model}")
         try:
             if logging_obj is None:
                 logging_obj, kwargs = function_setup(
@@ -3085,7 +3080,20 @@ def client(original_function):
                 )
             ):
                 try:
-                    base_model = model
+                    (
+                        _,  # model is no update for safety
+                        custom_llm_provider,
+                        dynamic_api_key,
+                        api_base,
+                    ) = litellm.get_llm_provider(
+                        model=model,
+                        custom_llm_provider=kwargs.get("custom_llm_provider", None),
+                        api_base=kwargs.get("api_base", None),
+                        api_key=kwargs.get("api_key", None),
+                    )
+                    base_model = _get_base_model_from_llm_provider(
+                        model, custom_llm_provider
+                    )
                     if kwargs.get("hf_model_name", None) is not None:
                         base_model = f"huggingface/{kwargs.get('hf_model_name')}"
                     max_output_tokens = (
@@ -3111,6 +3119,7 @@ def client(original_function):
                         round(user_max_tokens)
                     )  # make sure max tokens is always an int
                 except Exception as e:
+                    print_verbose(f"CHECK MAX TOKENS base_model= {base_model}")
                     print_verbose(f"Error while checking max token limit: {str(e)}")
             # MODEL CALL
             result = original_function(*args, **kwargs)
@@ -3649,6 +3658,7 @@ def client(original_function):
 
             return result
         except Exception as e:
+            print("Exception wrapper_async e=", e)
             traceback_exception = traceback.format_exc()
             end_time = datetime.datetime.now()
             if logging_obj:
@@ -4254,12 +4264,12 @@ def cost_per_token(
         raise litellm.exceptions.NotFoundError(  # type: ignore
             message=error_str,
             model=model,
+            llm_provider="",
             response=httpx.Response(
                 status_code=404,
                 content=error_str,
                 request=httpx.Request(method="cost_per_token", url="https://github.com/BerriAI/litellm"),  # type: ignore
             ),
-            llm_provider="",
         )
 
 
@@ -6477,6 +6487,7 @@ def get_utc_datetime():
 
 
 def get_max_tokens(model: str):
+    print("get_max_tokens model=", model)
     """
     Get the maximum number of output tokens allowed for a given model.
 
@@ -6494,7 +6505,8 @@ def get_max_tokens(model: str):
         8192
     """
 
-    def _get_max_position_embeddings(model_name):
+    def _get_max_position_embeddings_huggingface(model_name):
+        print("_get_max_position_embeddings model_name=", model_name)
         # Construct the URL for the config.json file
         config_url = f"https://huggingface.co/{model_name}/raw/main/config.json"
         try:
@@ -6521,7 +6533,7 @@ def get_max_tokens(model: str):
                 return litellm.model_cost[model]["max_tokens"]
         model, custom_llm_provider, _, _ = get_llm_provider(model=model)
         if custom_llm_provider == "huggingface":
-            max_tokens = _get_max_position_embeddings(model_name=model)
+            max_tokens = _get_max_position_embeddings_huggingface(model_name=model)
             return max_tokens
         else:
             raise Exception()
@@ -8998,6 +9010,7 @@ def exception_type(
                             message=f"AlephAlphaException - {original_exception.message}",
                             llm_provider="aleph_alpha",
                             model=model,
+                            response=None,
                         )
                     elif original_exception.status_code == 400:
                         exception_mapping_worked = True
@@ -10747,11 +10760,12 @@ class CustomStreamWrapper:
         except Exception as e:
             traceback_exception = traceback.format_exc()
             e.message = str(e)
-            raise exception_type(
+            exception_type(
                 model=self.model,
                 custom_llm_provider=self.custom_llm_provider,
                 original_exception=e,
             )
+            raise Exception("Unknown error in chunk_creator()")
 
     def set_logging_event_loop(self, loop):
         """
@@ -10853,11 +10867,12 @@ class CustomStreamWrapper:
             if isinstance(e, OpenAIError):
                 raise e
             else:
-                raise exception_type(
+                exception_type(
                     model=self.model,
                     original_exception=e,
                     custom_llm_provider=self.custom_llm_provider,
                 )
+                raise Exception("Unknown error in __next__()")
 
     async def __anext__(self):
         try:
@@ -11528,3 +11543,8 @@ def _get_base_model_from_metadata(model_call_details=None):
                 if base_model is not None:
                     return base_model
     return None
+
+
+def _get_base_model_from_llm_provider(model, llm_provider):
+    base_model = model.replace(llm_provider + "/", "")
+    return base_model
